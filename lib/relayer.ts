@@ -111,20 +111,33 @@ const ENTRYPOINT_ABI = [
   },
 ] as const;
 
+// Default public RPCs — no env vars needed for basic operation
+const DEFAULT_RPCS: Record<number, string> = {
+  31337: "http://127.0.0.1:8545",
+  11155111: "https://ethereum-sepolia-rpc.publicnode.com",
+  421614: "https://arbitrum-sepolia-rpc.publicnode.com",
+  84532: "https://base-sepolia-rpc.publicnode.com",
+};
+
+const DEFAULT_CHAINS = [31337, 11155111, 421614, 84532];
+
 export function loadConfigFromEnv(): RelayerConfig {
   const relayerPrivateKey = process.env.RELAYER_PRIVATE_KEY as Hex;
   if (!relayerPrivateKey) {
     throw new Error("RELAYER_PRIVATE_KEY not set");
   }
 
-  const rpcUrls: Record<number, string> = {};
-  const allowedChains = (process.env.ALLOWED_CHAINS ?? "31337")
-    .split(",")
-    .map(Number);
+  const allowedChains = (process.env.ALLOWED_CHAINS
+    ? process.env.ALLOWED_CHAINS.split(",").map(Number)
+    : DEFAULT_CHAINS);
 
+  // Use env RPC if set, otherwise fall back to public defaults
+  const rpcUrls: Record<number, string> = {};
   for (const chainId of allowedChains) {
-    const url = process.env[`RPC_URL_${chainId}`];
-    if (url) rpcUrls[chainId] = url;
+    rpcUrls[chainId] =
+      process.env[`RPC_URL_${chainId}`] ??
+      DEFAULT_RPCS[chainId] ??
+      "";
   }
 
   return {
