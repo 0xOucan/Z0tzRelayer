@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "@vercel/node@3"
+    }
+  },
+  "rewrites": [
+    { "source": "/relay", "destination": "/api/relay" },
+    { "source": "/health", "destination": "/api/health" },
+    { "source": "/config", "destination": "/api/config" },
+    { "source": "/bridge", "destination": "/api/bridge" }
+  ]
+}

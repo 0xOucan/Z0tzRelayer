@@ -1,0 +1,20 @@
+{
+  "name": "@z0tz/relayer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "tsc",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "viem": "^2.38.6"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^3.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
