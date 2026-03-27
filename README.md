@@ -24,11 +24,13 @@ cd Z0tzRelayer
 pnpm install
 
 # 3. Configure environment variables in Vercel dashboard:
-#    RELAYER_PRIVATE_KEY     — EOA that pays gas (gets reimbursed)
-#    RPC_URL_11155111        — Sepolia RPC
+#    RELAYER_PRIVATE_KEY     — EOA that pays gas (gets reimbursed by paymaster)
+#    RPC_URL_11155111        — Ethereum Sepolia RPC (Alchemy/Infura free tier)
 #    RPC_URL_421614          — Arbitrum Sepolia RPC
 #    RPC_URL_84532           — Base Sepolia RPC
 #    ALLOWED_CHAINS          — 11155111,421614,84532
+#    PAYMASTER_ADDRESS       — your deployed Z0tzPaymaster (you fund it with ETH)
+#    ACCOUNT_FACTORY_ADDRESS — your deployed Z0tzAccountFactory
 #    ENTRYPOINT_ADDRESS      — 0x0000000071727De22E5E9d8BAf0edAc6f37da032
 #    PAYMASTER_ADDRESS       — (deployed Z0tzPaymaster address)
 #    ACCOUNT_FACTORY_ADDRESS — (deployed Z0tzAccountFactory address)
