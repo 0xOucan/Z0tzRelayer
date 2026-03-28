@@ -146,7 +146,7 @@ export function loadConfigFromEnv(): RelayerConfig {
     relayerPrivateKey,
     rpcUrls,
     entryPointAddress: (process.env.ENTRYPOINT_ADDRESS ??
-      "0x0000000071727De22E5E9d8BAf0edAc6f37da032") as Address,
+      "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108") as Address,
     allowedChains,
     paymasterAddress: process.env.PAYMASTER_ADDRESS as Address | undefined,
     accountFactoryAddress: process.env.ACCOUNT_FACTORY_ADDRESS as Address | undefined,
