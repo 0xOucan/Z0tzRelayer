@@ -37,7 +37,9 @@ export interface RelayerConfig {
   allowedChains: number[];
   paymasterAddress?: Address;
   accountFactoryAddress?: Address;
-  bridgeAddresses?: Record<number, string>; // chainId => bridge contract address
+  bridgeAddresses: Record<number, string>;  // chainId => bridge contract address
+  paymasterAddresses: Record<number, string>; // chainId => paymaster address
+  factoryAddresses: Record<number, string>;   // chainId => factory address
 }
 
 export interface BridgeRequest {
@@ -111,33 +113,33 @@ const ENTRYPOINT_ABI = [
   },
 ] as const;
 
-// Default public RPCs — no env vars needed for basic operation
-const DEFAULT_RPCS: Record<number, string> = {
-  31337: "http://127.0.0.1:8545",
-  11155111: "https://ethereum-sepolia-rpc.publicnode.com",
-  421614: "https://arbitrum-sepolia-rpc.publicnode.com",
-  84532: "https://base-sepolia-rpc.publicnode.com",
-};
-
-const DEFAULT_CHAINS = [31337, 11155111, 421614, 84532];
-
 export function loadConfigFromEnv(): RelayerConfig {
   const relayerPrivateKey = process.env.RELAYER_PRIVATE_KEY as Hex;
   if (!relayerPrivateKey) {
     throw new Error("RELAYER_PRIVATE_KEY not set");
   }
 
-  const allowedChains = (process.env.ALLOWED_CHAINS
-    ? process.env.ALLOWED_CHAINS.split(",").map(Number)
-    : DEFAULT_CHAINS);
-
-  // Use env RPC if set, otherwise fall back to public defaults
   const rpcUrls: Record<number, string> = {};
+  const allowedChains = (process.env.ALLOWED_CHAINS ?? "31337")
+    .split(",")
+    .map(Number);
+
   for (const chainId of allowedChains) {
-    rpcUrls[chainId] =
-      process.env[`RPC_URL_${chainId}`] ??
-      DEFAULT_RPCS[chainId] ??
-      "";
+    const url = process.env[`RPC_URL_${chainId}`];
+    if (url) rpcUrls[chainId] = url;
+  }
+
+  // Read chain-specific addresses
+  const bridgeAddresses: Record<number, string> = {};
+  const paymasterAddresses: Record<number, string> = {};
+  const factoryAddresses: Record<number, string> = {};
+  for (const chainId of allowedChains) {
+    const bridge = process.env[`BRIDGE_ADDRESS_${chainId}`];
+    const paymaster = process.env[`PAYMASTER_ADDRESS_${chainId}`];
+    const factory = process.env[`FACTORY_ADDRESS_${chainId}`];
+    if (bridge) bridgeAddresses[chainId] = bridge;
+    if (paymaster) paymasterAddresses[chainId] = paymaster;
+    if (factory) factoryAddresses[chainId] = factory;
   }
 
   return {
@@ -148,6 +150,9 @@ export function loadConfigFromEnv(): RelayerConfig {
     allowedChains,
     paymasterAddress: process.env.PAYMASTER_ADDRESS as Address | undefined,
     accountFactoryAddress: process.env.ACCOUNT_FACTORY_ADDRESS as Address | undefined,
+    bridgeAddresses,
+    paymasterAddresses,
+    factoryAddresses,
   };
 }
 
