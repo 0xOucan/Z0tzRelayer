@@ -13,30 +13,66 @@ Designed for Vercel deployment. Zero external dependencies.
 | `/health` | GET | Relayer status, address, supported chains |
 | `/config` | GET | Public contract addresses for CLI/GUI discovery |
 
-## Deploy to Vercel
+## Quick Start
+
+### 1. Deploy Z0tz contracts (auto-fills relayer .env)
 
 ```bash
-# 1. Clone
-git clone git@github.com:0xOucan/Z0tzRelayer.git
-cd Z0tzRelayer
+# In the Z0tz repo — deploy to each chain
+cd contracts
+KEYSTORE_PASSPHRASE=**** RELAYER_ADDRESS=0xYourRelayerEOA \
+  npx hardhat run tasks/deploy-all.ts --network eth-sepolia
+KEYSTORE_PASSPHRASE=**** RELAYER_ADDRESS=0xYourRelayerEOA \
+  npx hardhat run tasks/deploy-all.ts --network arb-sepolia
+KEYSTORE_PASSPHRASE=**** RELAYER_ADDRESS=0xYourRelayerEOA \
+  npx hardhat run tasks/deploy-all.ts --network base-sepolia
+# → relayer/.env auto-filled with per-chain contract addresses
+```
 
-# 2. Install
+### 2. Local testing
+
+```bash
 pnpm install
+vercel dev    # starts on http://localhost:3000
+# .env was auto-filled by deploy-all.ts
+```
 
-# 3. Configure environment variables in Vercel dashboard:
-#    RELAYER_PRIVATE_KEY     — EOA that pays gas (gets reimbursed by paymaster)
-#    RPC_URL_11155111        — Ethereum Sepolia RPC (Alchemy/Infura free tier)
-#    RPC_URL_421614          — Arbitrum Sepolia RPC
-#    RPC_URL_84532           — Base Sepolia RPC
-#    ALLOWED_CHAINS          — 11155111,421614,84532
-#    PAYMASTER_ADDRESS       — your deployed Z0tzPaymaster (you fund it with ETH)
-#    ACCOUNT_FACTORY_ADDRESS — your deployed Z0tzAccountFactory
-#    ENTRYPOINT_ADDRESS      — 0x0000000071727De22E5E9d8BAf0edAc6f37da032
-#    PAYMASTER_ADDRESS       — (deployed Z0tzPaymaster address)
-#    ACCOUNT_FACTORY_ADDRESS — (deployed Z0tzAccountFactory address)
+### 3. Deploy to Vercel
 
-# 4. Deploy
+```bash
+# Set RELAYER_PRIVATE_KEY in Vercel dashboard
+# All other vars are in .env (auto-filled)
 vercel deploy --prod
+```
+
+## Environment Variables
+
+**Only `RELAYER_PRIVATE_KEY` is required.** Everything else has defaults or is auto-filled by the deployment wizard.
+
+```bash
+# Required
+RELAYER_PRIVATE_KEY=0x...     # EOA that pays gas (gets reimbursed)
+
+# Per-chain addresses (auto-filled by deploy-all.ts)
+PAYMASTER_ADDRESS_11155111=0x...   # Eth Sepolia paymaster
+FACTORY_ADDRESS_11155111=0x...     # Eth Sepolia factory
+BRIDGE_ADDRESS_11155111=0x...      # Eth Sepolia bridge
+TOKEN_ADDRESS_11155111=0x...       # Eth Sepolia token
+
+PAYMASTER_ADDRESS_421614=0x...     # Arb Sepolia
+FACTORY_ADDRESS_421614=0x...
+BRIDGE_ADDRESS_421614=0x...
+TOKEN_ADDRESS_421614=0x...
+
+PAYMASTER_ADDRESS_84532=0x...      # Base Sepolia
+FACTORY_ADDRESS_84532=0x...
+BRIDGE_ADDRESS_84532=0x...
+TOKEN_ADDRESS_84532=0x...
+
+# Optional (defaults to publicnode.com)
+# RPC_URL_11155111=https://...
+# RPC_URL_421614=https://...
+# RPC_URL_84532=https://...
 ```
 
 ## How It Works
@@ -45,61 +81,62 @@ vercel deploy --prod
 
 ```json
 {
-  "userOp": {
-    "sender": "0x...",
-    "nonce": "0x0",
-    "initCode": "0x",
-    "callData": "0x...",
-    "accountGasLimits": "0x...",
-    "preVerificationGas": "0x...",
-    "gasFees": "0x...",
-    "paymasterAndData": "0x...",
-    "signature": "0x..."
-  },
+  "userOp": { "sender": "0x...", "nonce": "0x0", "callData": "0x...", "signature": "0x...", "..." },
   "chainId": 84532
 }
 ```
 
-The relayer:
-1. Validates the UserOp structure
-2. Calls `EntryPoint.handleOps()` using the relayer's EOA
-3. EntryPoint validates the P-256 signature on the smart account
+1. Validates UserOp structure
+2. Calls `EntryPoint.handleOps()` using relayer's EOA
+3. EntryPoint validates P-256 signature on the smart account
 4. Z0tzPaymaster pays gas + collects 1% token fee
-5. Returns the transaction hash
+5. Returns transaction hash
 
 ### Bridge Relay (`POST /bridge`)
 
 ```json
 {
-  "lockId": "0x...",
-  "sender": "0x...",
-  "amount": "1000000",
-  "srcChainId": 11155111,
-  "destChainId": 84532,
-  "destRecipient": "0x..."
+  "lockId": "0x...", "sender": "0x...", "amount": "1000000",
+  "srcChainId": 11155111, "destChainId": 84532, "destRecipient": "0x..."
 }
 ```
 
-The relayer:
-1. Verifies the lock exists on the source chain
-2. Calls `Z0tzBridge.mint()` on the destination chain
-3. Returns the mint transaction hash
+1. Verifies lock exists on source chain
+2. Calls `Z0tzBridge.mint()` on destination chain
+3. Returns mint transaction hash
 
 ## Security
 
-- The relayer **cannot steal funds** — it only submits transactions that are pre-signed by the user's passkey
-- The relayer **cannot modify transfers** — the UserOp signature covers all calldata
+- The relayer **cannot steal funds** — it only submits pre-signed transactions
+- The relayer **cannot modify transfers** — UserOp signature covers all calldata
 - The relayer **cannot read amounts** — FHE-encrypted values are opaque
+- **Paymaster hardened** — only sponsors Z0tz accounts + approved contract targets
+- **Per-chain isolation** — separate paymaster, factory, bridge per chain
 - Rate limiting: 60 ops/minute per IP
 - CORS enabled for CLI/GUI access
 
-## Local Development
+## Architecture
 
-```bash
-# Run locally (uses Hardhat node at localhost:8545)
-cp .env.example .env
-# Edit .env with your local config
-vercel dev
+```
+Each chain has its own contracts:
+
+Eth Sepolia (11155111)     Arb Sepolia (421614)      Base Sepolia (84532)
+├── Z0tzPaymaster          ├── Z0tzPaymaster          ├── Z0tzPaymaster
+├── Z0tzAccountFactory     ├── Z0tzAccountFactory     ├── Z0tzAccountFactory
+├── Z0tzToken              ├── Z0tzToken              ├── Z0tzToken
+├── Z0tzBridge             ├── Z0tzBridge             ├── Z0tzBridge
+├── StealthRegistry        ├── StealthRegistry        ├── StealthRegistry
+├── StealthAnnouncer       ├── StealthAnnouncer       ├── StealthAnnouncer
+└── StealthSweeper         └── StealthSweeper         └── StealthSweeper
+
+                    ┌───────────────────┐
+                    │   Z0tz Relayer    │
+                    │  (this service)   │
+                    │                   │
+                    │ RELAYER_PRIVATE_KEY│
+                    │ reads per-chain   │
+                    │ contract addresses│
+                    └───────────────────┘
 ```
 
 ## Future: P2P Relayer Network
