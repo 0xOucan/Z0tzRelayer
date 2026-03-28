@@ -4,17 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vercel dev",
+    "dev": "npx tsx server.ts",
+    "start": "npx tsx server.ts",
     "build": "tsc",
     "test": "vitest"
   },
   "dependencies": {
+    "dotenv": "^17.3.1",
+    "tsx": "^4.21.0",
     "viem": "^2.38.6"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "@vercel/node": "^3.0.0",
     "typescript": "^5.5.0",
-    "vitest": "^3.0.0",
-    "@types/node": "^20.0.0"
+    "vitest": "^3.0.0"
   }
 }

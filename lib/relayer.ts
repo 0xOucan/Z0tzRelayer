@@ -119,14 +119,21 @@ export function loadConfigFromEnv(): RelayerConfig {
     throw new Error("RELAYER_PRIVATE_KEY not set");
   }
 
+  // Default public RPCs — no env vars needed
+  const DEFAULT_RPCS: Record<number, string> = {
+    31337: "http://127.0.0.1:8545",
+    11155111: "https://ethereum-sepolia-rpc.publicnode.com",
+    421614: "https://arbitrum-sepolia-rpc.publicnode.com",
+    84532: "https://base-sepolia-rpc.publicnode.com",
+  };
+
   const rpcUrls: Record<number, string> = {};
-  const allowedChains = (process.env.ALLOWED_CHAINS ?? "31337")
+  const allowedChains = (process.env.ALLOWED_CHAINS ?? "31337,11155111,421614,84532")
     .split(",")
     .map(Number);
 
   for (const chainId of allowedChains) {
-    const url = process.env[`RPC_URL_${chainId}`];
-    if (url) rpcUrls[chainId] = url;
+    rpcUrls[chainId] = process.env[`RPC_URL_${chainId}`] ?? DEFAULT_RPCS[chainId] ?? "";
   }
 
   // Read chain-specific addresses
@@ -163,6 +170,7 @@ export function loadConfigFromEnv(): RelayerConfig {
 export function validateUserOp(
   userOp: UserOperation,
   config: RelayerConfig,
+  chainId?: number,
 ): string | null {
   if (!userOp.sender || !userOp.sender.startsWith("0x")) {
     return "Invalid sender address";
@@ -174,11 +182,22 @@ export function validateUserOp(
     return "Missing callData";
   }
 
-  // If paymaster is configured, verify the UserOp uses our paymaster
-  if (config.paymasterAddress && userOp.paymasterAndData !== "0x") {
+  // If paymaster is used, verify it's one of ours (per-chain or global)
+  if (userOp.paymasterAndData && userOp.paymasterAndData !== "0x" && userOp.paymasterAndData.length >= 42) {
     const pmAddr = userOp.paymasterAndData.slice(0, 42).toLowerCase();
-    if (pmAddr !== config.paymasterAddress.toLowerCase()) {
-      return `Unknown paymaster: ${pmAddr}. Expected: ${config.paymasterAddress}`;
+
+    // Check per-chain paymaster first, then global fallback
+    const allowedPaymasters: string[] = [];
+    if (chainId && config.paymasterAddresses[chainId]) {
+      allowedPaymasters.push(config.paymasterAddresses[chainId].toLowerCase());
+    }
+    if (config.paymasterAddress) {
+      allowedPaymasters.push(config.paymasterAddress.toLowerCase());
+    }
+
+    // If no paymaster configured, allow any (permissive mode)
+    if (allowedPaymasters.length > 0 && !allowedPaymasters.includes(pmAddr)) {
+      return `Unknown paymaster: ${pmAddr}. Allowed: ${allowedPaymasters.join(", ")}`;
     }
   }
 
@@ -205,7 +224,7 @@ export async function relayUserOp(
   }
 
   // Validate UserOp
-  const validationError = validateUserOp(userOp, config);
+  const validationError = validateUserOp(userOp, config, chainId);
   if (validationError) {
     return { success: false, error: validationError };
   }
@@ -254,8 +273,35 @@ export async function relayUserOp(
     await publicClient.waitForTransactionReceipt({ hash });
 
     return { success: true, transactionHash: hash };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+  } catch (error: any) {
+    let msg = error instanceof Error ? error.message : String(error);
+
+    // Try to decode FailedOp reason from the revert data
+    if (msg.includes("0x220266b6") || msg.includes("FailedOp")) {
+      try {
+        // Extract the revert data and decode
+        const match = msg.match(/0x220266b6[0-9a-fA-F]*/);
+        if (match) {
+          const { decodeErrorResult } = await import("viem");
+          const decoded = decodeErrorResult({
+            abi: [{
+              type: "error",
+              name: "FailedOp",
+              inputs: [
+                { name: "opIndex", type: "uint256" },
+                { name: "reason", type: "string" },
+              ],
+            }],
+            data: match[0] as `0x${string}`,
+          });
+          msg = `FailedOp: ${decoded.args?.[1] ?? "unknown reason"}`;
+        }
+      } catch {
+        // Keep original message if decoding fails
+      }
+    }
+
+    console.error(`[relayer] handleOps error: ${msg.slice(0, 300)}`);
     return { success: false, error: msg.slice(0, 500) };
   }
 }
